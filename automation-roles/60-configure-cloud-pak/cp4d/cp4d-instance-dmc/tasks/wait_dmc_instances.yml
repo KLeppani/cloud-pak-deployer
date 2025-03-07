@@ -1,6 +1,0 @@
----
-- name: Wait for Data Management Console instance to provision
-  include_tasks: wait_dmc_instance.yml
-  loop: "{{ _configured_dmc_instances }}"
-  loop_control:
-    loop_var: _dmc_instance

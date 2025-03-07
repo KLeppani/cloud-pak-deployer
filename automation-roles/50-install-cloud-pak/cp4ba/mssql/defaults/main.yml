@@ -1,8 +1,0 @@
-mssql_action: install
-mssql_base_dir: "{{ generic_directory }}"
-mssql_dir_name: mssql
-mssql_project_name: ""
-mssql_universal_password: ""
-mssql_storage_class_name: ""
-# From https://mcr.microsoft.com/v2/mssql/rhel/server/tags/list
-mssql_image: mcr.microsoft.com/mssql/rhel/server:2022-CU16-rhel-9.1

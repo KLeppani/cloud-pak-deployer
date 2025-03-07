@@ -1,5 +1,0 @@
----
-- include_role:
-    name: cp4d-cluster-delete
-  vars:
-    _p_current_cp4d_cluster: "{{ current_cp4d_cluster }}"

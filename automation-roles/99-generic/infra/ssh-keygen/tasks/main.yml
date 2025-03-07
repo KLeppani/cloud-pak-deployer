@@ -1,5 +1,0 @@
----
-- include_tasks: ssh-keygen-rsa.yml
-  when: (cloud_platform == 'aws' and _current_openshift_cluster.infrastructure.type  == 'self-managed' ) or cloud_platform == 'vsphere'
-
-

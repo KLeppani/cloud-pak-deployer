@@ -1,7 +1,0 @@
----
-- include_role:
-    name: generate-apply-yaml
-  vars:
-    _p_apply_yaml_description: Create Db2U configmap
-    _p_apply_yaml_template: db2u-product-cm.j2
-    _p_apply_yaml_output_file: "{{ status_dir }}/cp4d/{{ current_cp4d_cluster.project }}-db2u-product-cm.yml"

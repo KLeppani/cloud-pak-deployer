@@ -1,6 +1,0 @@
----
-- name: Wait for Watson Discovery instance to provision
-  include_tasks: wait_wd_instance.yml
-  loop: "{{ _configured_wd_instances }}"
-  loop_control:
-    loop_var: _wd_instance

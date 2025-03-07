@@ -1,6 +1,0 @@
----
-- name: Provision Watson Assistant instance from the cartridge specification
-  include_tasks: provision_wa_instance.yml
-  loop: "{{ _configured_wa_instances }}"
-  loop_control:
-    loop_var: _wa_instance

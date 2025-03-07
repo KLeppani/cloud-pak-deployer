@@ -1,3 +1,0 @@
----
-- include_tasks: cp4d-cluster-configure.yml
-  when: current_cp4d_cluster.state=='installed'

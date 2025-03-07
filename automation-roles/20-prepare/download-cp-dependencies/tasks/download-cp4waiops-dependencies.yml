@@ -1,7 +1,0 @@
----
-- name: Download and install cloudctl
-  include_role:
-    name: cloudctl-download
-
-- include_role:
-    name: helm-download

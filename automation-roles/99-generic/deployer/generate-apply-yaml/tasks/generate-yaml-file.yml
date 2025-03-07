@@ -1,5 +1,0 @@
----
-- name: "Generate YAML file for {{ _p_apply_yaml_description }}"
-  template:
-    src: "{{ _p_apply_yaml_template }}"
-    dest: "{{ _p_apply_yaml_output_file }}"

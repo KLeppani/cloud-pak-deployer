@@ -1,9 +1,0 @@
----
-- include_tasks: apply-global-pull-secret-entitled.yml
-  when: (_p_registry_url | default('')) == ''
-
-- include_tasks: apply-global-pull-secret-private.yml
-  when: (_p_registry_url | default('')) != ''
-
-- include_tasks: non-mco-apply-pull-secret.yml
-  when: not _mco_exists

@@ -1,9 +1,0 @@
-#!/bin/bash
-
-rm -f {{ status_dir }}/log/mirror_*.log
-rm -f /tmp/mirroring-complete.txt
-
-while [ ! -e /tmp/mirroring-complete.txt ];do
-    cp -f -v /tmp/work/mirror_*.log {{ status_dir }}/log
-    sleep 30
-done

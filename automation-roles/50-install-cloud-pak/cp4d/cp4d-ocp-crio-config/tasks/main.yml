@@ -1,3 +1,0 @@
----
-- include_tasks: create-crio-config.yml
-  when: _mco_exists

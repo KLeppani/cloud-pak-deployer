@@ -1,3 +1,0 @@
-implemented_cloud_platform_types: ["azure"]
-
-_az_install_package: "azure-cli" # or use specific version "azure-cli-<version>-1.el7"
