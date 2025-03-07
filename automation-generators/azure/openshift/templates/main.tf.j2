@@ -1,0 +1,78 @@
+apiVersion: v1
+baseDomain: {{ generator.attributes.domain_name }}
+metadata:
+  name: {{ generator.attributes.name }}
+
+controlPlane:   
+  hyperthreading: Enabled 
+  name: master
+  platform:
+    azure:
+      osDisk:
+        diskSizeGB: 1024 
+        diskType: Premium_LRS
+      type: {{ generator.attributes.control_plane_flavour }}
+      zones:
+      - "1"
+{% if generator.attributes.infrastructure.multi_zone | default(False) %}
+      - "2"
+      - "3"
+{% endif %}
+  replicas: 3
+
+compute: 
+- hyperthreading: Enabled 
+  name: worker
+  platform:
+    azure:
+      type: {{ generator.attributes.compute_flavour }}
+      zones:
+      - "1"
+{% if generator.attributes.infrastructure.multi_zone | default(False) %}
+      - "2"
+      - "3"
+{% endif %}
+      osDisk:
+        diskSizeGB: {{ generator.attributes.compute_disk_size_gb }}
+        diskType: Premium_LRS
+  replicas: {{ generator.attributes.compute_nodes }}
+
+networking:
+  clusterNetwork:
+{% if generator.attributes.network.pod_cidr is defined  %}
+  - cidr: {{ generator.attributes.network.pod_cidr }}
+    hostPrefix: 23
+{% else %}
+  - cidr: 10.128.0.0/14
+    hostPrefix: 23
+{% endif %}
+  machineNetwork:
+  - cidr: {{ generator.attributes.network.machine_cidr | default('10.0.0.0/16') }}
+  networkType: OVNKubernetes
+  serviceNetwork:
+  - 172.30.0.0/16
+
+platform:
+  azure:
+    region: {{ all_config.global_config.azure_location }}
+    resourceGroupName: {{ _azure_config.resource_group.name }}
+    cloudName: AzurePublicCloud
+
+{% if not generator.attributes.infrastructure.private_only | default(False) %}
+    baseDomainResourceGroupName: {{ generator.attributes.domain_resource_group }}
+    outboundType: Loadbalancer
+{% else %}    
+    networkResourceGroupName: {{ _azure_config.vnet.network_resource_group_name }}
+    virtualNetwork: {{ _azure_config.vnet.name }}
+    controlPlaneSubnet: {{ _azure_config.control_plane.subnet.name }}
+    computeSubnet: {{ _azure_config.compute.subnet.name }}
+    outboundType: UserDefinedRouting
+{% endif %}
+
+fips: false
+pullSecret: '{{ lookup("file","/tmp/ocp_pullsecret.json") }}'
+sshKey: '{{ _ocp_ssh_pub_key }}'
+
+{% if generator.attributes.infrastructure.private_only | default(False) %}
+publish: Internal
+{% endif %}

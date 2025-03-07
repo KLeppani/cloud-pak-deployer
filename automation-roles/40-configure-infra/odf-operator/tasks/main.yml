@@ -1,0 +1,89 @@
+---
+- set_fact:
+    _aws_sts_mode: False
+
+- set_fact:
+    _aws_sts_mode: True
+  when: 
+  - cloud_platform == 'aws'
+  - (_p_openshift_cluster.infrastructure.type | default('self-managed')) == 'self-managed'
+  - (_p_openshift_cluster.infrastructure.credentials_mode | default('')) == 'Manual'
+
+- set_fact:
+    _aws_sts_mode: True
+  when: 
+  - cloud_platform == 'aws'
+  - (_p_openshift_cluster.infrastructure.type | default('self-managed')) == 'rosa'
+  - (_p_openshift_cluster.infrastructure.use_sts | default(False))
+
+- include_tasks: aws-s3-sts-role.yml
+  when: _aws_sts_mode
+
+- include_role:
+    name: run-command
+  vars:
+    _p_command_description: Create OpenShift project openshift-storage
+    _p_command: "oc create ns openshift-storage || true"
+
+- name: Check if there are compute nodes which have been labelled as storage nodes
+  shell: |
+    oc get no -l cluster.ocs.openshift.io/openshift-storage -o name | wc -l
+  register: _nodes_odf_storage_label
+
+- name: Label all compute nodes as storage nodes to allow StorageCluster to be created, ignore failure
+  shell: |
+    oc label no -l node-role.kubernetes.io/worker cluster.ocs.openshift.io/openshift-storage=
+  failed_when: False
+  when: _nodes_odf_storage_label.stdout=='0'
+
+- name: Retrieve default channel for ocs-operator manifest
+  shell:
+    oc get packagemanifest ocs-operator -o jsonpath='{.status.defaultChannel}'
+  register: _odf_packagemanifest
+  failed_when: False
+  retries: 30
+  delay: 10
+  until: _odf_packagemanifest.rc==0
+
+- set_fact:
+    _odf_channel: "{{ _odf_packagemanifest.stdout }}"
+
+- include_role:
+    name: generate-apply-yaml
+  vars:
+    _p_apply_yaml_description: Create ODF operator
+    _p_apply_yaml_template: odf-operator.j2
+    _p_apply_yaml_output_file: "{{ status_dir }}/openshift/{{ current_openshift_cluster.name }}-odf-operator.yaml"
+
+- block:
+  - name: Wait until ODF Operator CSV has status Succeeded
+    shell: |
+      oc get csv -n openshift-storage \
+        -l operators.coreos.com/ocs-operator.openshift-storage \
+        --no-headers \
+        -o custom-columns='name:metadata.name,phase:status.phase' | \
+        grep -i succeeded | wc -l
+    register: _odf_csv_status
+    retries: 30
+    delay: 30
+    until: _odf_csv_status.stdout == "1"
+    vars:
+      ansible_callback_diy_runner_retry_msg: >-
+        {%- set result = ansible_callback_diy.result.output -%}
+        {%- set retries_left = result.retries - result.attempts -%}
+        Retrying: {{ ansible_callback_diy.task.name }} ({{ retries_left }} Retries left) ...
+
+  - name: Ensure that Data Foundation is shown in the console
+    shell: |
+      oc patch console.operator cluster \
+        -n openshift-storage \
+        --type json \
+        -p '[{"op": "add", "path": "/spec/plugins", "value": ["odf-console"]}]'
+
+  - name: Set operator to Manual approval if the cluster is installed with STS
+    shell: |
+      oc patch subscriptions.operators.coreos.com -n openshift-storage odf-operator \
+          --type merge \
+          --patch '{"spec":{"installPlanApproval":"Manual"}}'
+    when: _aws_sts_mode
+  when: not cpd_dry_run

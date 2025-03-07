@@ -1,0 +1,21 @@
+---
+- name: Get IBM Entitled Registry key
+  ansible.builtin.include_role:
+    name: vault-get-secret
+  vars:
+    secret_name: "ibm_cp_entitlement_key"
+    secret_group: "{{ environment_name }}"
+
+- set_fact:
+    ibm_cp_entitlement_key: "{{ secret_value }}"
+
+- name: Fail if the entitlement key was not found in the vault and entitled registry is to be used
+  fail:
+    msg: "No image registry name specified for CP4D but cannot pull from entitled registry because of missing entitlement key (ibm_cp_entitlement_key) in vault"
+  when: ibm_cp_entitlement_key == ""
+
+- name: Set the global pull secret for the entitled registry
+  ansible.builtin.include_role:
+    name: cp-ocp-global-pull-secret
+  vars:
+    _p_ibm_cp_entitlement_key: "{{ ibm_cp_entitlement_key }}"

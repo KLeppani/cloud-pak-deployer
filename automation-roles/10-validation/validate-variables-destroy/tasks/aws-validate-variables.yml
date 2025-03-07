@@ -1,0 +1,4 @@
+---
+- name: Get AWS credentials from the vault
+  include_role:
+    name: aws-get-credentials

@@ -1,0 +1,11 @@
+---
+- name: Validate mandatory variables for upstream DNS servers are defined
+  assert:
+    that:
+      - _p_upstream_dns is defined
+
+- include_role:
+    name: run-command
+  vars:
+    _p_command_description: Patch the DNS custom resource
+    _p_command: oc patch dns.operator/default --type=json -p '[{"op":"replace","path":"/spec/servers","value":{{ lookup('template','dns.j2',convert_data=False) }} }]' -o yaml

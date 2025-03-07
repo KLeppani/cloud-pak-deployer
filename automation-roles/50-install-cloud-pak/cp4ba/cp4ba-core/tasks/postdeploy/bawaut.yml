@@ -1,0 +1,170 @@
+- name: Get OCP Apps domain
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: apps-endpoint
+  vars:
+    common_output_to_var: "apps_endpoint_domain"
+
+- name: Get IAM token
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: iam-token-user
+  vars:
+    common_cpfs_project: "{{ cp4ba_project_name }}"
+    common_user: "{{ lc_principal_admin_user }}"
+    common_password: "{{ lc_principal_admin_password }}"
+    common_output_to_var: "iam_token"
+
+- name: Get Zen token
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: zen-token
+  vars:
+    common_iam_token: "{{ iam_token }}"
+    common_user: "{{ lc_principal_admin_user }}"
+    common_namespace_name: "{{ cp4ba_project_name }}"
+    common_output_to_var: "zen_token"
+
+- name: Add admin groups to tw_admins
+  ansible.builtin.uri:
+    url: "https://cpd-{{ cp4ba_project_name }}.{{ apps_endpoint_domain }}/bas/rest/bpm/wle/v1/group/tw_admins?action=addMember&group={{ item }}&parts=all"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ zen_token }}"
+    validate_certs: false
+    status_code:
+      - 200
+  with_items: "{{ lc_admin_groups }}"
+
+- name: Add admin groups and general groups to tw_authors
+  ansible.builtin.uri:
+    url: "https://cpd-{{ cp4ba_project_name }}.{{ apps_endpoint_domain }}/bas/rest/bpm/wle/v1/group/tw_authors?action=addMember&group={{ item }}&parts=all"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ zen_token }}"
+    validate_certs: false
+    status_code:
+      - 200
+  with_items: "{{ lc_general_groups + lc_admin_groups }}"
+
+- name: Setup FNCM Subscription for ECM Content event
+  ansible.builtin.include_tasks: bawaut-fncm-subscription.yml
+
+# Without enabling this on domain level, Case History and BAW Timeline doesn't work.
+- name: Prepare java file for Case History Enablement
+  ansible.builtin.template:
+    src: bawaut/EnableCaseHistory.java.j2
+    dest: "{{ cp4ba_output_directory }}/EnableCaseHistory.java"
+    mode: u+rwx
+
+- name: Get CPE pods
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ cp4ba_project_name }}"
+    label_selectors:
+      - "app={{ cp4ba_cr_meta_name }}-cpe-deploy"
+  register: pods
+
+- name: Get CPE pod name
+  ansible.builtin.set_fact:
+    cpe_pod_name: "{{ pods.resources[0].metadata.name }}"
+
+- name: Copy java file to CPE pod
+  kubernetes.core.k8s_cp:
+    namespace: "{{ cp4ba_project_name }}"
+    pod: "{{ cpe_pod_name }}"
+    remote_path: "/tmp/EnableCaseHistory.java"
+    local_path: "{{ cp4ba_output_directory }}/EnableCaseHistory.java"
+    no_preserve: true
+    state: to_pod
+
+- name: Execute EnableCaseHistory.java
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_project_name }}"
+    pod: "{{ cpe_pod_name }}"
+    command: java -classpath /opt/ibm/wlp/usr/servers/defaultServer/jaceLib/Jace.jar /tmp/EnableCaseHistory.java
+
+- name: Set usage entry
+  ansible.builtin.include_role:
+    name: usage
+    tasks_from: set-entry
+  vars:
+    usage_entry_name: CP4BA-Business-Automation-Workflow-Authoring-BAWAUT
+    usage_entry_value:
+      "# Business Automation Workflow Authoring (BAWAUT)
+
+      ## Endpoints
+
+      - Process Portal: https://cpd-{{ cp4ba_project_name }}.{{ apps_endpoint_domain }}/bas/ProcessPortal
+
+      - Process Admin: https://cpd-{{ cp4ba_project_name }}.{{ apps_endpoint_domain }}/bas/ProcessAdmin
+
+      - Process Inspector: https://cpd-{{ cp4ba_project_name }}.{{ apps_endpoint_domain }}/bas/ProcessInspector
+
+      - OAS REST API: https://cpd-{{ cp4ba_project_name }}.{{ apps_endpoint_domain }}/bas/bpm/explorer
+
+      - OAS REST API Operations: https://cpd-{{ cp4ba_project_name }}.{{ apps_endpoint_domain }}/bas/bpm/explorer/?url=/bas/ops/docs
+
+      - OAS REST API Case: https://cpd-{{ cp4ba_project_name }}.{{ apps_endpoint_domain }}/bas/bpm/explorer/?url=/bas/case/docs
+
+      - Original REST API: https://cpd-{{ cp4ba_project_name }}.{{ apps_endpoint_domain }}/bas/bpmrest-ui
+
+      - PFS federated systems: https://cpd-{{ cp4ba_project_name }}.{{ apps_endpoint_domain }}/bas/rest/bpm/federated/v1/systems
+
+      - Workplace on App Engine: https://cpd-{{ cp4ba_project_name }}.{{ apps_endpoint_domain }}/icn/navigator/?desktop=workplace \
+      (If you encounter error stating that you are using self-signed certificates, clear you cookies)
+
+      - Workplace on BAS: https://cpd-{{ cp4ba_project_name }}.{{ apps_endpoint_domain }}/bas/Workplace
+
+      - Case monitor: https://cpd-{{ cp4ba_project_name }}.{{ apps_endpoint_domain }}/icn/navigator/?desktop=bawmonitor
+
+      - Case Client: https://cpd-{{ cp4ba_project_name }}.{{ apps_endpoint_domain }}/icn/navigator/?desktop=baw
+
+      - Case administration: https://cpd-{{ cp4ba_project_name }}.{{ apps_endpoint_domain }}/icn/navigator/?desktop=bawadmin
+
+      - Case REST endpoint: https://cpd-{{ cp4ba_project_name }}.{{ apps_endpoint_domain }}/bas/CaseManager/CASEREST/v2
+
+      - Case Builder: https://cpd-{{ cp4ba_project_name }}.{{ apps_endpoint_domain }}/bas/CaseBuilder
+
+
+      ## Credentials
+
+      - {{ lc_principal_admin_user }} / {{ lc_principal_admin_password }}
+
+
+
+      ## FNCM Server definition in BAW:
+
+      \ \ - Host name: icp4adeploy-cmis-svc.cp4ba.svc.cluster.local
+
+      \ \ - Port: 9443
+
+      \ \ - Context path: /cmis/openfncmis_wlp/services
+
+      \ \ - Secure server: true
+
+      \ \ - Repository: depends on which you want to connect in internal FNCM (e.g. BAWDOCS or CONTENT)
+
+      \ \ - Credentials as in Credentials section
+
+
+      ## BAW SQL Integration
+
+      The BAWAUT Liberty server is configured to connect with the Postgres 'bawexternal' database.
+
+      This allows you to perform queries with the 'SQL Integration' Services from 'System Data' Toolkit.
+
+      For testing convenience, a default table named 'public.user_db' is created with some data.
+
+      Note: You can create your own tables/objects in the bawexternal database.
+
+
+
+      BAWEXTERNAL Informations:
+
+      - JNDI DataSourceName: 'jdbc/bawexternal'
+
+      - Default testing table: 'public.user_db'
+
+      "

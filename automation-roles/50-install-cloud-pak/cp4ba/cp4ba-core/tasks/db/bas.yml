@@ -1,0 +1,47 @@
+- name: Get postgresql pod
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ cp4ba_postgresql_project }}"
+    label_selectors:
+      - app=postgresql
+  register: postgresql_pod
+
+# Based on https://www.ibm.com/docs/en/cloud-paks/cp-biz-automation/latest?topic=studio-creating-databases
+- name: APPDB DB
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: >
+      bash -c "
+        psql postgresql://postgres:$POSTGRES_PASSWORD@localhost:5432 <<-EOF
+        -- create user appdb
+        CREATE USER appdb WITH PASSWORD '{{ cp4ba_postgresql_universal_password }}';
+
+        -- create database appdb -- default template tablespace
+        CREATE DATABASE appdb OWNER appdb TEMPLATE template0 ENCODING UTF8;
+        REVOKE CONNECT ON DATABASE appdb FROM PUBLIC;
+      EOF"
+  register: command_status
+
+# Based on https://www.ibm.com/docs/en/cloud-paks/cp-biz-automation/latest?topic=studio-creating-databases
+- name: BASDB DB
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: >
+      bash -c "
+        psql postgresql://postgres:$POSTGRES_PASSWORD@localhost:5432 <<-EOF
+        -- create user basdb
+        CREATE USER basdb WITH PASSWORD '{{ cp4ba_postgresql_universal_password }}';
+
+        -- create database basdb -- default template tablespace
+        CREATE DATABASE basdb OWNER basdb TEMPLATE template0 ENCODING UTF8;
+        REVOKE CONNECT ON DATABASE basdb FROM PUBLIC;
+
+        -- Connect to your database and create schema
+        \c basdb;
+        SET ROLE basdb;
+        CREATE SCHEMA IF NOT EXISTS basdb;
+      EOF"
+  register: command_status

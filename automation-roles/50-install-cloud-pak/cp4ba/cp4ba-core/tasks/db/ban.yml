@@ -1,0 +1,38 @@
+# Based on https://www.ibm.com/docs/en/cloud-paks/cp-biz-automation/latest?topic=navigator-preparing-database
+# Based on https://www.ibm.com/docs/en/content-navigator/latest?topic=navigator-creating-postgresql-database-content
+
+- name: Get postgresql pod
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ cp4ba_postgresql_project }}"
+    label_selectors:
+      - app=postgresql
+  register: postgresql_pod
+
+- name: BAN DB prepare tablespace
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: mkdir -p /bitnami/postgresql/tablespaces/icndb_tbs
+  register: command_status
+  failed_when: command_status.rc != 0 and command_status.stderr is not search('.*File exists.*')
+
+- name: BAN DB
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: >
+      bash -c "
+        psql postgresql://postgres:$POSTGRES_PASSWORD@localhost:5432 <<-EOF
+        -- create user icndb
+        CREATE USER icndb WITH PASSWORD '{{ cp4ba_postgresql_universal_password }}';
+
+        -- create tablespace for icndb
+        CREATE TABLESPACE icndb_tbs OWNER icndb LOCATION '/bitnami/postgresql/tablespaces/icndb_tbs';
+
+        -- create database icndb
+        CREATE DATABASE icndb OWNER icndb TEMPLATE template0 ENCODING UTF8 TABLESPACE icndb_tbs;
+        REVOKE CONNECT ON DATABASE icndb FROM PUBLIC;
+      EOF"
+  register: command_status

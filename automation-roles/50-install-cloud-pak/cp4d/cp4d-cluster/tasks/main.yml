@@ -1,0 +1,30 @@
+---
+- name: Show current CP4D cluster object
+  debug:
+    var: current_cp4d_cluster
+
+- include_role:
+    name: get-openshift-cluster
+  vars:
+    _p_openshift_cluster_name: "{{ current_cp4d_cluster.openshift_cluster_name }}"
+
+- include_tasks: install-cp4d-prepare.yml
+  when: current_cp4d_cluster.state=='installed'
+
+- include_tasks: install-cp4d.yml
+  when: current_cp4d_cluster.state=='installed'
+
+# Install selected cartridges
+- include_tasks: cp4d-cartridges.yml
+  when: 
+  - current_cp4d_cluster.state=='installed'
+  - not (cpd_test_cartridges | default(False) | bool) 
+
+# Install all cartridges one by one
+- include_tasks: cp4d-cartridges-test-all.yml
+  when: 
+  - current_cp4d_cluster.state=='installed'
+  - (cpd_test_cartridges | default(False) | bool) 
+
+- include_tasks: delete-cp4d.yml
+  when: current_cp4d_cluster.state=='removed'

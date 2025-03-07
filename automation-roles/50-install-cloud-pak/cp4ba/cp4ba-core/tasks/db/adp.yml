@@ -1,0 +1,182 @@
+- name: Get postgresql pod
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ cp4ba_postgresql_project }}"
+    label_selectors:
+      - app=postgresql
+  register: postgresql_pod
+
+- name: ADPBASE DB
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: >
+      bash -c "
+        psql postgresql://postgres:$POSTGRES_PASSWORD@localhost:5432 <<-EOF
+        -- create user adpbase
+        CREATE USER adpbase WITH PASSWORD '{{ cp4ba_postgresql_universal_password }}';
+
+        -- create database adpbase -- default template tablespace
+        CREATE DATABASE adpbase OWNER adpbase TEMPLATE template0 ENCODING UTF8;
+        REVOKE CONNECT ON DATABASE adpbase FROM PUBLIC;
+      EOF"
+  register: command_status
+
+- name: ADP proj DBs
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: >
+      bash -c "
+        psql postgresql://postgres:$POSTGRES_PASSWORD@localhost:5432 <<-EOF
+        -- create user {{ item }}
+        CREATE USER {{ item }} WITH PASSWORD '{{ cp4ba_postgresql_universal_password }}';
+
+        -- create database {{ item }} -- default template tablespace
+        CREATE DATABASE {{ item }} OWNER {{ item }} TEMPLATE template0 ENCODING UTF8;
+        REVOKE CONNECT ON DATABASE {{ item }} FROM PUBLIC;
+      EOF"
+  register: command_status
+  with_items:
+    - proj1
+    - proj2
+    - proj3
+    - proj4
+    - proj5
+    - proj6
+
+# Based on https://www.ibm.com/docs/en/cloud-paks/cp-biz-automation/latest?topic=scripts-creating-databases-document-processing
+# DEVOS Based on
+# https://www.ibm.com/docs/en/filenet-p8-platform/latest?topic=vtpiicd-creating-postgresql-database-table-spaces-content-platform-engine-object-store
+- name: DEVOS1 DB prepare tablespace
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: mkdir -p /bitnami/postgresql/tablespaces/devos1_tbs
+  register: command_status
+  failed_when: command_status.rc != 0 and command_status.stderr is not search('.*File exists.*')
+
+- name: DEVOS1 DB
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: >
+      bash -c "
+        psql postgresql://postgres:$POSTGRES_PASSWORD@localhost:5432 <<-EOF
+        -- create user devos1
+        CREATE USER devos1 WITH PASSWORD '{{ cp4ba_postgresql_universal_password }}';
+
+        -- create tablespace for devos1
+        CREATE TABLESPACE devos1_tbs OWNER devos1 LOCATION '/bitnami/postgresql/tablespaces/devos1_tbs';
+
+        -- create database devos1
+        CREATE DATABASE devos1 OWNER devos1 TEMPLATE template0 ENCODING UTF8 TABLESPACE devos1_tbs;
+        REVOKE CONNECT ON DATABASE devos1 FROM PUBLIC;
+      EOF"
+  register: command_status
+
+- name: ADP copy DB init files
+  kubernetes.core.k8s_cp:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: postgresql-0
+    remote_path: /tmp/_adp_tmp/PG
+    local_path: "{{ cp4ba_output_directory }}/cert-kubernetes/ACA/configuration-ha/PG"
+    no_preserve: true
+    state: to_pod
+
+# Based on https://www.ibm.com/docs/en/cloud-paks/cp-biz-automation/latest?topic=engine-preparing-postgresql-databases
+- name: ADP make init scripts executable
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: postgresql-0
+    command: >
+      bash -c "
+      cd /tmp/_adp_tmp/PG;
+      chmod +x InitBaseDB.sh;
+      chmod +x CreateBaseDB.sh;
+      chmod +x InitTenantDB.sh;
+      chmod +x AddTenant.sh;
+      "
+  register: command_status
+
+- name: ADP init ADPBase DB
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: postgresql-0
+    command: >
+      bash -c '
+      cd /tmp/_adp_tmp/PG;
+      export db_server={{ cp4ba_postgresql_hostname }};
+      export db_port=5432;
+      export db_server_for_ca={{ cp4ba_postgresql_hostname }};
+      export db_port_for_ca=5432;
+      export db_adm_username=adpbase;
+      export db_adm_pwd={{ cp4ba_postgresql_universal_password }};
+      export db_adm_pwd_b64_encoded=0;
+      export base_db_name=adpbase;
+      export base_db_user=adpbase;
+      export base_db_pwd={{ cp4ba_postgresql_universal_password }};
+      export base_db_pwd_b64_encoded=0;
+      export base_user_already_defined=1;
+      export base_valid_user=1;
+      export base_pwdconfirmed=1;
+      export confirmation=y;
+      export ssl=No;
+      export table_space_already_defined=1;
+      export tablespace_name=pg_default;
+      ./InitBaseDB.sh;
+      '
+  register: command_status
+  until: command_status.rc == 0
+  retries: 5
+  failed_when: command_status.rc != 0 and (command_status.stderr + command_status.stdout) is not search('.*already exists.*')
+
+- name: ADP init proj DBs
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: postgresql-0
+    command: >
+      bash -c '
+      cd /tmp/_adp_tmp/PG;
+      export db_server={{ cp4ba_postgresql_hostname }};
+      export db_port=5432;
+      export db_server_for_ca={{ cp4ba_postgresql_hostname }};
+      export db_port_for_ca=5432;
+      export db_adm_username={{ item }};
+      export db_adm_pwd={{ cp4ba_postgresql_universal_password }};
+      export db_adm_pwd_b64_encoded=0;
+      export base_db_name=adpbase;
+      export base_db_user=adpbase;
+      export base_db_pwd={{ cp4ba_postgresql_universal_password }};
+      export base_db_pwd_b64_encoded=0;
+      export base_user_already_defined=1;
+      export base_valid_user=1;
+      export base_pwdconfirmed=1;
+      export tenant_type=0;
+      export tenant_id={{ item }};
+      export tenant_db_name={{ item }};
+      export tenant_dsn_name={{ item }};
+      export tenant_db_user={{ item }};
+      export user_already_defined=1;
+      export tenant_pwdconfirmed=1;
+      export tenant_db_pwd={{ cp4ba_postgresql_universal_password }};
+      export tenant_db_pwd_b64_encoded=0;
+      export tenant_ontology=default;
+      export confirmation=y;
+      export ssl=No;
+      export table_space_already_defined=1;
+      export tablespace_name=pg_default;
+      ./InitTenantDB.sh;
+      '
+  register: command_status
+  until: command_status.rc == 0
+  retries: 5
+  failed_when: command_status.rc != 0 and (command_status.stderr + command_status.stdout) is not search('.*already exists.*')
+  with_items:
+    - proj1
+    - proj2
+    - proj3
+    - proj4
+    - proj5
+    - proj6

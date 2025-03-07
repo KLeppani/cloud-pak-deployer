@@ -1,0 +1,184 @@
+- name: Get postgresql pod
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ cp4ba_postgresql_project }}"
+    label_selectors:
+      - app=postgresql
+  register: postgresql_pod
+
+# Based on https://www.ibm.com/docs/en/cloud-paks/cp-biz-automation/latest?topic=authoring-creating-required-databases
+# Based on https://www.ibm.com/docs/en/filenet-p8-platform/latest?topic=vtpiicd-creating-postgresql-database-table-spaces-content-platform-engine-object-store
+- name: BAWDOCS DB prepare tablespace
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: mkdir -p /bitnami/postgresql/tablespaces/bawdocs_tbs
+  register: command_status
+  failed_when: command_status.rc != 0 and command_status.stderr is not search('.*File exists.*')
+
+- name: BAWDOCS DB
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: >
+      bash -c "
+        psql postgresql://postgres:$POSTGRES_PASSWORD@localhost:5432 <<-EOF
+        -- create user bawdocs
+        CREATE USER bawdocs WITH PASSWORD '{{ cp4ba_postgresql_universal_password }}';
+
+        -- create tablespace for bawdocs
+        CREATE TABLESPACE bawdocs_tbs OWNER bawdocs LOCATION '/bitnami/postgresql/tablespaces/bawdocs_tbs';
+
+        -- create database bawdocs
+        CREATE DATABASE bawdocs OWNER bawdocs TEMPLATE template0 ENCODING UTF8 TABLESPACE bawdocs_tbs;
+        REVOKE CONNECT ON DATABASE bawdocs FROM PUBLIC;
+      EOF"
+  register: command_status
+
+# Based on https://www.ibm.com/docs/en/cloud-paks/cp-biz-automation/latest?topic=authoring-creating-required-databases
+# Based on https://www.ibm.com/docs/en/filenet-p8-platform/latest?topic=vtpiicd-creating-postgresql-database-table-spaces-content-platform-engine-object-store
+- name: BAWTOS DB prepare tablespace
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: mkdir -p /bitnami/postgresql/tablespaces/bawtos_tbs
+  register: command_status
+  failed_when: command_status.rc != 0 and command_status.stderr is not search('.*File exists.*')
+
+- name: BAWTOS DB
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: >
+      bash -c "
+        psql postgresql://postgres:$POSTGRES_PASSWORD@localhost:5432 <<-EOF
+        -- create user bawtos
+        CREATE USER bawtos WITH PASSWORD '{{ cp4ba_postgresql_universal_password }}';
+
+        -- create tablespace for bawtos
+        CREATE TABLESPACE bawtos_tbs OWNER bawtos LOCATION '/bitnami/postgresql/tablespaces/bawtos_tbs';
+
+        -- create database bawtos
+        CREATE DATABASE bawtos OWNER bawtos TEMPLATE template0 ENCODING UTF8 TABLESPACE bawtos_tbs;
+        REVOKE CONNECT ON DATABASE bawtos FROM PUBLIC;
+      EOF"
+  register: command_status
+
+# Based on https://www.ibm.com/docs/en/cloud-paks/cp-biz-automation/latest?topic=authoring-creating-required-databases
+# Based on https://www.ibm.com/docs/en/filenet-p8-platform/latest?topic=vtpiicd-creating-postgresql-database-table-spaces-content-platform-engine-object-store
+- name: BAWDOS DB prepare tablespace
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: mkdir -p /bitnami/postgresql/tablespaces/bawdos_tbs
+  register: command_status
+  failed_when: command_status.rc != 0 and command_status.stderr is not search('.*File exists.*')
+
+- name: BAWDOS DB
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: >
+      bash -c "
+        psql postgresql://postgres:$POSTGRES_PASSWORD@localhost:5432 <<-EOF
+        -- create user bawdos
+        CREATE USER bawdos WITH PASSWORD '{{ cp4ba_postgresql_universal_password }}';
+
+        -- create tablespace for bawdos
+        CREATE TABLESPACE bawdos_tbs OWNER bawdos LOCATION '/bitnami/postgresql/tablespaces/bawdos_tbs';
+
+        -- create database bawdos
+        CREATE DATABASE bawdos OWNER bawdos TEMPLATE template0 ENCODING UTF8 TABLESPACE bawdos_tbs;
+        REVOKE CONNECT ON DATABASE bawdos FROM PUBLIC;
+      EOF"
+  register: command_status
+
+# Based on https://www.ibm.com/docs/en/baw/20.x?topic=system-preparing-database-case-history-store
+# Based on
+# https://www.ibm.com/docs/en/cloud-paks/cp-biz-automation/latest?topic=bawraws-optional-enabling-timeline-visualizer-widget-display-business-automation-workflow-process-activity-flow
+- name: CHDB DB prepare tablespace
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: mkdir -p /bitnami/postgresql/tablespaces/chdb_tbs
+  register: command_status
+  failed_when: command_status.rc != 0 and command_status.stderr is not search('.*File exists.*')
+
+- name: CHDB DB
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: >
+      bash -c "
+        psql postgresql://postgres:$POSTGRES_PASSWORD@localhost:5432 <<-EOF
+        -- create user chdb
+        CREATE USER chdb WITH PASSWORD '{{ cp4ba_postgresql_universal_password }}';
+
+        -- create tablespace for chdb
+        CREATE TABLESPACE chdb_tbs OWNER chdb LOCATION '/bitnami/postgresql/tablespaces/chdb_tbs';
+
+        -- create database chdb
+        CREATE DATABASE chdb OWNER chdb TEMPLATE template0 ENCODING UTF8 TABLESPACE chdb_tbs;
+        REVOKE CONNECT ON DATABASE chdb FROM PUBLIC;
+      EOF"
+  register: command_status
+
+# Prepare BAW custom DB for usage with the SQL Integration Toolkit
+- name: BAWEXTERNAL DB prepare tablespace
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: mkdir -p /bitnami/postgresql/tablespaces/bawexternal_tbs
+  register: command_status
+  failed_when: command_status.rc != 0 and command_status.stderr is not search('.*File exists.*')
+
+- name: BAWEXTERNAL DB
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: >
+      bash -c "
+        psql postgresql://postgres:$POSTGRES_PASSWORD@localhost:5432 <<-EOF
+        -- create user bawexternal
+        CREATE USER bawexternal WITH PASSWORD '{{ cp4ba_postgresql_universal_password }}';
+
+        -- create tablespace for bawexternal
+        CREATE TABLESPACE bawexternal_tbs OWNER bawexternal LOCATION '/bitnami/postgresql/tablespaces/bawexternal_tbs';
+
+        -- create database bawexternal
+        CREATE DATABASE bawexternal OWNER bawexternal TEMPLATE template0 ENCODING UTF8 TABLESPACE bawexternal_tbs;
+        REVOKE CONNECT ON DATABASE bawexternal FROM PUBLIC;
+      EOF"
+  register: command_status
+
+- name: BAWEXTERNAL DB - Populate sample values
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: >
+      bash -c "
+        psql postgresql://bawexternal:$POSTGRES_PASSWORD@localhost:5432 <<-EOF
+        -- add test table
+        CREATE TABLE IF NOT EXISTS public.user_db
+        (
+            id serial NOT NULL,
+            username character varying NOT NULL,
+            first_name character varying,
+            last_name character varying,
+            PRIMARY KEY (id),
+            CONSTRAINT unique_username UNIQUE (username)
+        );
+
+        -- add test data
+        INSERT INTO public.user_db(username, first_name, last_name)
+        VALUES
+          ('jdoe0','John','Doe'),
+          ('hrobbey1','Hurleigh','Robbey'),
+          ('nhankins2','Nicola','Hankins'),
+          ('rcassin3','Rois','Cassin'),
+          ('shalbert4','Silvia','Halbert'),
+          ('lrowena5','Linn','Rowena')
+        ON CONFLICT (username) DO NOTHING;
+      EOF"
+  register: command_status

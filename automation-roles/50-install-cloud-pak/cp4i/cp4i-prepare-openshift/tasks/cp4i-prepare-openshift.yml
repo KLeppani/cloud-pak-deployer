@@ -1,0 +1,47 @@
+---
+
+# Params:
+#
+#   _p_private_reg_url
+#   _p_private_reg_auth
+#   _p_entitled_reg_auth
+#   _p_private_reg_defined
+#   _p_entitled_reg_defined
+#
+
+- name: Pause the Machine Config Operator
+  include_role:
+    name: cp-ocp-mco-pause
+
+- name: Create ImageContentSourcePolicy for the Cloud Pak with private registry
+  block:
+
+    - name: Create ImageContentSourcePolicy for each instance type
+      include_tasks: image-content-source-policy.yml
+      loop: "{{ current_cp4i_cluster.instances | default([]) }}"
+      loop_control:
+        loop_var: current_cp4i_instance
+
+    - name: Create ImageContentSourcePolicy for Foundational Services
+      include_tasks: foundational-svc-content-source-policy.yml
+      when: _new_style
+
+  when: _p_private_reg_defined
+
+- name: Set the global pull secret for the private registry
+  include_tasks: pull-secret.yml
+  vars:
+    _p_registry_url: "{{ _private_reg_url }}" 
+    _p_registry_pull_secret: "{{ _private_reg_auth }}"
+  when: _p_private_reg_defined
+
+- name: Set the global pull secret for the entitled registry
+  include_tasks: pull-secret.yml
+  vars:
+    _p_registry_url: "{{ _v_entitled_registry }}"
+    _p_registry_pull_secret: "{{ _p_entitled_reg_auth }}"
+  when: _p_entitled_reg_defined
+
+- name: Resume the Machine Config operator
+  include_role:
+    name: cp-ocp-mco-resume

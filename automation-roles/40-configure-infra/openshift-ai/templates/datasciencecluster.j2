@@ -1,0 +1,40 @@
+---
+apiVersion: datasciencecluster.opendatahub.io/v1
+kind: DataScienceCluster
+metadata:
+  name: default-dsc
+  labels:
+    app.kubernetes.io/name: datasciencecluster
+    app.kubernetes.io/instance: default-dsc
+    app.kubernetes.io/part-of: rhods-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: rhods-operator
+spec:
+  components:
+    codeflare:
+      managementState: Removed
+    dashboard:
+      managementState: Removed
+    datasciencepipelines:
+      managementState: Removed
+    kserve:
+      managementState: Managed
+      defaultDeploymentMode: RawDeployment
+      serving:
+        name: knative-serving
+        managementState: Removed
+    kueue:
+      managementState: Removed
+    modelmeshserving:
+      managementState: Managed
+    ray:
+      managementState: Removed
+# Install training operator only if CP4D version >= 5.0.3
+{% if (_p_cp4d_version | default('5.0.3')) >= '5.0.3' %}
+    trainingoperator:
+      managementState: Managed
+    trustyai:
+      managementState: Removed
+{% endif %}
+    workbenches:
+      managementState: Removed

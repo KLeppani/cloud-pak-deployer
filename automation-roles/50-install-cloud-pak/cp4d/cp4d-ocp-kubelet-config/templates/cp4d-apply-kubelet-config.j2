@@ -1,0 +1,16 @@
+#!/bin/bash
+
+#
+# This script changes the kubelet settings for Cloud Pak for Data
+#
+
+NODE_FIX_DIR=/tmp/cloud-pak-node-fix
+
+# Copy the current Kubelet config file
+cp -r /etc/kubernetes/kubelet.conf ${NODE_FIX_DIR}/config/cp4d-kubelet.conf
+
+export KUBECONFIG=/etc/kubernetes/kubeconfig
+oc patch --local=true --filename=/etc/kubernetes/kubelet.conf \
+  --dry-run=client \
+  --type=merge -o yaml --patch='{"allowedUnsafeSysctls": ["kernel.msg*","kernel.shm*","kernel.sem"]}' \
+  -o yaml > ${NODE_FIX_DIR}/config/cp4d-kubelet.conf

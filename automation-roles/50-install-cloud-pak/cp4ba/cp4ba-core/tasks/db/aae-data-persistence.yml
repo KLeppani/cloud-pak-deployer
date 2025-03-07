@@ -1,0 +1,38 @@
+# Based on https://www.ibm.com/docs/en/cloud-paks/cp-biz-automation/latest?topic=scripts-creating-postgresql-database
+# Based on https://www.ibm.com/docs/en/filenet-p8-platform/latest?topic=vtpiicd-creating-postgresql-database-table-spaces-content-platform-engine-object-store
+
+- name: Get postgresql pod
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ cp4ba_postgresql_project }}"
+    label_selectors:
+      - app=postgresql
+  register: postgresql_pod
+
+- name: AAE Data persistence DB prepare tablespace
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: mkdir -p /bitnami/postgresql/tablespaces/aeos_tbs
+  register: command_status
+  failed_when: command_status.rc != 0 and command_status.stderr is not search('.*File exists.*')
+
+- name: AAE Data persistence DB
+  kubernetes.core.k8s_exec:
+    namespace: "{{ cp4ba_postgresql_project }}"
+    pod: "{{ postgresql_pod.resources[0].metadata.name }}"
+    command: >
+      bash -c "
+        psql postgresql://postgres:$POSTGRES_PASSWORD@localhost:5432 <<-EOF
+        -- create user aeos
+        CREATE USER aeos WITH PASSWORD '{{ cp4ba_postgresql_universal_password }}';
+
+        -- create tablespace for aeos
+        CREATE TABLESPACE aeos_tbs OWNER aeos LOCATION '/bitnami/postgresql/tablespaces/aeos_tbs';
+
+        -- create database aeos
+        CREATE DATABASE aeos OWNER aeos TEMPLATE template0 ENCODING UTF8 TABLESPACE aeos_tbs;
+        REVOKE CONNECT ON DATABASE aeos FROM PUBLIC;
+      EOF"
+  register: command_status
